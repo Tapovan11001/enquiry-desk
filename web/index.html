@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enquiry Desk</title>
+<meta name="description" content="A contact form backend: checks each enquiry, logs it to Google Sheets, emails the sender a confirmation through Resend, and tells you what it is about.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Enquiry Desk</h1>
+    <p class="tag">A contact form that actually does something with what people send. Each message is checked, saved as a row in your Google Sheet, answered with a confirmation email straight away, and sorted so you know what it's about before you open it.</p>
+  </header>
+
+  <main class="page">
+    <section class="form-side" aria-labelledby="form-h">
+      <div class="sec-head">
+        <h2 id="form-h">The form your visitors see</h2>
+        <div class="fill" role="group" aria-label="Fill with a sample">
+          <span class="muted">Try:</span>
+          <button type="button" class="chip" data-sample="intern">Internship offer</button>
+          <button type="button" class="chip" data-sample="freelance">Freelance job</button>
+          <button type="button" class="chip" data-sample="bot">A spam bot</button>
+        </div>
+      </div>
+
+      <form id="form" novalidate>
+        <div class="two">
+          <label>Your name <input name="name" autocomplete="name" required></label>
+          <label>Email <input name="email" type="email" autocomplete="email" required></label>
+        </div>
+        <div class="two">
+          <label><span>Phone <span class="opt">optional</span></span> <input name="phone" type="tel" autocomplete="tel"></label>
+          <label><span>Company or school <span class="opt">optional</span></span> <input name="company" autocomplete="organization"></label>
+        </div>
+        <label>What's it about?
+          <select name="topic" required><option value="">Choose one</option></select>
+        </label>
+        <label>Message <textarea name="message" rows="6" required></textarea></label>
+        <label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <div class="send-row">
+          <button type="submit" id="send" class="primary">Send message</button>
+          <label id="live-wrap" class="live" hidden><input type="checkbox" id="live"> Send for real</label>
+        </div>
+        <p id="thanks" class="thanks" hidden></p>
+      </form>
+
+      <details class="claude">
+        <summary>Sort with Claude instead of keyword rules</summary>
+        <p class="fine">Paste an Anthropic key and each message is read by Claude, which picks a category, an urgency and writes a one-line summary. If Claude's answer is malformed or slow, the keyword rules take over, so nothing is lost. Your key stays in this tab and goes only to api.anthropic.com.</p>
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." aria-label="Anthropic API key">
+      </details>
+    </section>
+
+    <section class="result-side" aria-labelledby="res-h">
+      <h2 id="res-h">What happens when they press Send</h2>
+      <p id="empty" class="fine">Fill the form (or pick a sample above) and send it. Every step shows up here.</p>
+      <ol id="steps" class="steps" hidden></ol>
+
+      <div id="mails" class="mails" hidden>
+        <article class="mail" id="mail-them">
+          <div class="mail-meta"><span class="who">To the sender</span><span id="them-to"></span></div>
+          <h3 id="them-subject"></h3>
+          <div id="them-body" class="mail-body"></div>
+        </article>
+        <article class="mail you" id="mail-you">
+          <div class="mail-meta"><span class="who">To you</span><span id="you-badges"></span></div>
+          <h3 id="you-subject"></h3>
+          <pre id="you-body" class="mail-body"></pre>
+        </article>
+      </div>
+    </section>
+
+    <section class="sheet-side" aria-labelledby="sheet-h">
+      <div class="sec-head">
+        <h2 id="sheet-h">Your Google Sheet <span id="row-count" class="count"></span></h2>
+        <div class="sheet-tools"><button type="button" id="copy-sheet" class="ghost">Copy for Sheets</button><button type="button" id="clear" class="link">Clear</button></div>
+      </div>
+      <div class="sheet-wrap"><table class="sheet" id="sheet" aria-label="Enquiries sheet"></table></div>
+      <p class="fine">Each enquiry is written here before any email is sent, so even if email fails, nothing is lost. The Status column is a dropdown in the real sheet: New, Replied, Waiting, Closed.</p>
+    </section>
+
+    <section class="setup" aria-labelledby="setup-h">
+      <h2 id="setup-h">Connect it to your own site (about 15 minutes)</h2>
+      <ol>
+        <li><b>The sheet.</b> Make a Google Sheet, open <b>Extensions → Apps Script</b>, paste <code>Webhook.gs</code> below, and run <code>setup</code>. It creates an <b>Enquiries</b> sheet and prints a secret.</li>
+        <li><b>Publish the script.</b> Deploy → New deployment → Web app, run as you, open to anyone. Copy the URL. It only appends rows when the secret matches.</li>
+        <li><b>Resend.</b> Sign up at resend.com, verify your domain, and make an API key. The free plan covers 3,000 emails a month.</li>
+        <li><b>Deploy this repo on Vercel</b> and add the settings below. The form on this page then shows a "Send for real" switch.</li>
+        <li><b>Point any form at it.</b> Post JSON to <code>/api/enquiry</code>, or use the snippet below. A plain HTML form works too, with no JavaScript.</li>
+      </ol>
+      <div class="env">
+        <table>
+          <thead><tr><th>Setting</th><th>What goes in it</th></tr></thead>
+          <tbody>
+            <tr><td><code>RESEND_API_KEY</code></td><td>Your Resend key</td></tr>
+            <tr><td><code>RESEND_FROM</code></td><td>The sender, on your verified domain, like <code>Aarov Makhija &lt;hello@yourdomain.com&gt;</code></td></tr>
+            <tr><td><code>OWNER_EMAIL</code></td><td>Where new enquiries go</td></tr>
+            <tr><td><code>OWNER_NAME</code></td><td>How the confirmation is signed</td></tr>
+            <tr><td><code>SHEETS_WEBHOOK_URL</code></td><td>The web app URL from step 2</td></tr>
+            <tr><td><code>SHEETS_SECRET</code></td><td>The secret <code>setup</code> printed</td></tr>
+            <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Optional. Sorts messages with Claude instead of keywords</td></tr>
+            <tr><td><code>ALLOWED_ORIGINS</code></td><td>Optional. Your site's address, so other sites can't use your form</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-code="gs">Webhook.gs</button>
+        <button type="button" role="tab" aria-selected="false" data-code="snippet">Form snippet</button>
+        <span class="grow"></span>
+        <button type="button" id="copy-code" class="primary small">Copy</button>
+      </div>
+      <pre id="code" tabindex="0"></pre>
+    </section>
+  </main>
+
+  <section class="how" aria-label="How it works">
+    <h2>How it works</h2>
+    <p>Most contact forms just forward an email, and messages get lost or never answered. Enquiry Desk is the part behind the form. When someone presses Send, it first checks the message is real and quietly drops spam bots. Then it saves the message as a new row in your Google Sheet, so nothing is ever lost. It emails the sender straight away to say their enquiry was received, with a reference number, and emails you a short summary. Claude can read each message and mark whether it's a job offer, a project or a question, and how urgent it is.</p>
+  </section>
+
+  <footer class="foot">
+    <p>The page above runs the same code as the server, with the emails and the sheet kept in your browser. Nothing you type here is sent anywhere unless you switch on "Send for real".</p>
+  </footer>
+<span class="made-by">Created by Aarov Makhija</span>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>
